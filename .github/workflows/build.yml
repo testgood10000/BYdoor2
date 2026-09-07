@@ -1,0 +1,60 @@
+name: Build iOS App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Project
+        run: |
+          # 自动生成 iOS 项目结构
+          mkdir -p BaiyunGate
+          cat << 'EOF' > BaiyunGate/Info.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>BaiyunGate</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.offline.baiyungate</string>
+              <key>CFBundleName</key>
+              <string>白云通门禁</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>NSBluetoothAlwaysUsageDescription</key>
+              <string>用于连接白云通门禁离线开门</string>
+              <key>UILaunchScreen</key>
+              <dict/>
+              <key>UIRequiredDeviceCapabilities</key>
+              <array>
+                  <string>arm64</string>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Build IPA
+        run: |
+          # 编译 Swift 源码生成 arm64 可执行文件
+          xcrun -sdk iphoneos swiftc -target arm64-apple-ios15.0 \
+            -o BaiyunGate/BaiyunGate ViewController.swift \
+            -framework UIKit -framework CoreBluetooth -framework CommonCrypto
+
+          # 打包成标准 IPA 文件结构
+          mkdir -p Payload
+          cp -r BaiyunGate Payload/BaiyunGate.app
+          zip -r BaiyunGate.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaiyunGate-IPA
+          path: BaiyunGate.ipa
