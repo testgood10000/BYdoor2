@@ -5,16 +5,31 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Project
+      - name: Compile and Package IPA
         run: |
-          # 自动生成 iOS 项目结构
-          mkdir -p BaiyunGate
-          cat << 'EOF' > BaiyunGate/Info.plist
+          set -e
+          echo "=== 1. 获取 iOS SDK 路径 ==="
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "SDK: $SDK_PATH"
+
+          echo "=== 2. 创建 App 包目录 ==="
+          mkdir -p AppBundle.app
+
+          echo "=== 3. 编译 Swift 可执行文件 ==="
+          xcrun swiftc -target arm64-apple-ios15.0 \
+            -sdk "$SDK_PATH" \
+            -import-objc-header /dev/null \
+            ViewController.swift \
+            -emit-executable \
+            -o AppBundle.app/BaiyunGate
+
+          echo "=== 4. 生成标准 Info.plist ==="
+          cat << 'EOF' > AppBundle.app/Info.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -25,36 +40,46 @@ jobs:
               <string>com.offline.baiyungate</string>
               <key>CFBundleName</key>
               <string>白云通门禁</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
               <key>CFBundleShortVersionString</key>
               <string>1.0</string>
               <key>CFBundleVersion</key>
               <string>1</string>
+              <key>LSRequiresIPhoneOS</key>
+              <true/>
               <key>NSBluetoothAlwaysUsageDescription</key>
-              <string>用于连接白云通门禁离线开门</string>
+              <string>用于连接门禁离线开门</string>
+              <key>NSBluetoothPeripheralUsageDescription</key>
+              <string>用于连接门禁离线开门</string>
               <key>UILaunchScreen</key>
               <dict/>
               <key>UIRequiredDeviceCapabilities</key>
               <array>
                   <string>arm64</string>
               </array>
+              <key>UISupportedInterfaceOrientations</key>
+              <array>
+                  <string>UIInterfaceOrientationPortrait</string>
+              </array>
           </dict>
           </plist>
           EOF
 
-      - name: Build IPA
-        run: |
-          # 编译 Swift 源码生成 arm64 可执行文件
-          xcrun -sdk iphoneos swiftc -target arm64-apple-ios15.0 \
-            -o BaiyunGate/BaiyunGate ViewController.swift \
-            -framework UIKit -framework CoreBluetooth -framework CommonCrypto
+          echo "=== 5. 伪签名 (Ad-Hoc Signing) ==="
+          # 必须执行一次假签名，爱思助手和Sideloadly才能正确重签名安装
+          codesign --force --deep --sign - AppBundle.app
 
-          # 打包成标准 IPA 文件结构
+          echo "=== 6. 打包 IPA ==="
           mkdir -p Payload
-          cp -r BaiyunGate Payload/BaiyunGate.app
-          zip -r BaiyunGate.ipa Payload
+          cp -r AppBundle.app Payload/
+          zip -qry BaiyunGate.ipa Payload
 
-      - name: Upload IPA Artifact
+          echo "=== 打包完成！ ==="
+
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: BaiyunGate-IPA
           path: BaiyunGate.ipa
+          retention-days: 7
