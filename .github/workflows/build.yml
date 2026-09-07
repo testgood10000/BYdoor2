@@ -13,22 +13,18 @@ jobs:
       - name: Compile and Package IPA
         run: |
           set -e
-          echo "=== 1. 获取 iOS SDK 路径 ==="
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          echo "SDK: $SDK_PATH"
 
-          echo "=== 2. 创建 App 包目录 ==="
           mkdir -p AppBundle.app
 
-          echo "=== 3. 编译 Swift 可执行文件 ==="
+          # 加上了 -parse-as-library 参数解决 @main 识别问题
           xcrun swiftc -target arm64-apple-ios15.0 \
             -sdk "$SDK_PATH" \
-            -import-objc-header /dev/null \
+            -parse-as-library \
             ViewController.swift \
             -emit-executable \
             -o AppBundle.app/BaiyunGate
 
-          echo "=== 4. 生成标准 Info.plist ==="
           cat << 'EOF' > AppBundle.app/Info.plist
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -66,16 +62,11 @@ jobs:
           </plist>
           EOF
 
-          echo "=== 5. 伪签名 (Ad-Hoc Signing) ==="
-          # 必须执行一次假签名，爱思助手和Sideloadly才能正确重签名安装
           codesign --force --deep --sign - AppBundle.app
 
-          echo "=== 6. 打包 IPA ==="
           mkdir -p Payload
           cp -r AppBundle.app Payload/
           zip -qry BaiyunGate.ipa Payload
-
-          echo "=== 打包完成！ ==="
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
